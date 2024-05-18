@@ -29,6 +29,14 @@ def _to_mph(knots: int | float) -> float:
     return round(knots * 1.15, 1)
 
 
+def _rvr_parse(reportable_value: str) -> str:
+    if reportable_value[0] == "M":
+        return f"< {int(reportable_value[1:])} ft"
+    if reportable_value[0] == "P":
+        return f"> {int(reportable_value[1:])} ft"
+    return f"{int(reportable_value)} ft"
+
+
 class MetarWind:
     """Dataclass for grouping of various wind observations."""
 
@@ -188,13 +196,11 @@ class MetarObservation:
     }
 
     _sky_conditions = {
-        "CLR": "Clear",
         "FEW": "Few",
         "SCT": "Scattered",
         "BKN": "Broken",
         "OVC": "Overcast",
         "VV": "Vertical Visibility",
-        "SKC": "Clear",
     }
 
     def __init__(self, metar_observation: str) -> None:
@@ -268,12 +274,14 @@ class MetarObservation:
         return sb
 
     def report_type(self) -> str:
+        """Type of Report (METAR and SPECI)"""
         if self._report_type is None:
             return "Unspecified"
         rtype = self._report_types.get(self._report_type, "Unknown")
         return f"{self._report_type} ({rtype})"
 
     def station_id(self) -> str:
+        """Station Identifier"""
         icao_name = _ICAOS.get(self._station_id)
         if icao_name is None:
             return self._station_id
@@ -281,6 +289,8 @@ class MetarObservation:
 
     def date_time(self) -> str:
         """
+        Date and Time of Report
+
         Note: the decoded version of this method will assume that the month
         and year of the data is the current month and year.
         """
@@ -300,6 +310,7 @@ class MetarObservation:
         return f"{metar_dt.strftime('%m-%d-%Y %H:%M UTC')} ({delta} minutes ago)"
 
     def report_modifier(self) -> str:
+        """Report Modifier"""
         if self._report_modifier is None:
             return "Unspecified"
         report_mod = self._report_mods.get(self._report_modifier)
@@ -308,21 +319,60 @@ class MetarObservation:
         return f"{self._report_modifier} ({report_mod})"
 
     def wind(self) -> str:
+        """Wind Group"""
         return str(MetarWind(self._wind))
 
     def visibility(self) -> str:
+        """Visibility Group"""
         vis_short = self._visibility[0:-2]
         if vis_short.startswith("M"):
             return f"Less than {_fraction_to_float(vis_short[1:])} mi"
         return f"{_fraction_to_float(vis_short)} mi"
 
     def runway_visual_range(self) -> str:
+        """Runway Visual Range Group"""
         if self._runway_visual_range is None:
             return "Unspecified"
-        return ""
+        parts = self._runway_visual_range[1:-2].split("/")
+        sb = f"Runway {parts[0]}"
+        if "V" not in parts[1]:
+            sb = f"{sb} {_rvr_parse(parts[1])}"
+        else:
+            var_parts = parts[1].split("V")
+            sb = (
+                f"{sb} varrying between {_rvr_parse(var_parts[0])}"
+                f" and {_rvr_parse(var_parts[1])}"
+            )
+        return sb
+
+    def present_weather(self) -> str:
+        """
+        Present Weather Group
+
+        TODO: Implement parsing
+        """
+        if self._weather_phenomena is None:
+            return "Unspecified"
+        return self._weather_phenomena
+
+    def sky_condition(self) -> str:
+        """Sky Condition Group"""
+        if self._sky_condition == "CLR" or self._sky_condition == "SKC":
+            return "Clear skies"
+        sb = ""
+        for cond in self._sky_condition.split():
+            contraction = self._sky_conditions[cond[0:3]]
+            if "/" in cond:
+                height = "[below station]"
+            else:
+                height = f"{int(cond[3:]) * 100}"
+            sb = f"{sb}, {contraction} at {height} ft"
+        return sb.strip(" ,")
 
     def decode(self) -> str:
+        """Decodes the entire observation and outputs a pretty report."""
         return (
+            f"{str(self)}\n\n"
             f"Report Type -- {self.report_type()}\n"
             f"Station Identifier -- {self.station_id()}\n"
             f"Timestamp -- {self.date_time()}\n"
@@ -330,6 +380,8 @@ class MetarObservation:
             f"Wind -- {self.wind()}\n"
             f"Visibility -- {self.visibility()}\n"
             f"Runway Visual Range -- {self.runway_visual_range()}\n"
+            f"Present Weather -- {self.present_weather()}\n"
+            f"Sky Conditions -- {self.sky_condition()}\n"
         )
 
     def _pop_report_type(self, observations: list[str]) -> str | None:
@@ -391,7 +443,7 @@ class MetarObservation:
         return visibility
 
     def _pop_runway_visual(self, observations: list[str]) -> str | None:
-        if observations[0].endswith("FT"):
+        if observations[0].startswith("R") and observations[0].endswith("FT"):
             return observations.pop(0)
         return None
 
