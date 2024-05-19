@@ -4,11 +4,11 @@ Experimenting with parsing METAR data into a python object.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from fractions import Fraction
 from typing import Any
 
-import math
 import requests
 
 from .errors import AviationWeatherError
@@ -40,6 +40,10 @@ def _rvr_parse(reportable_value: str) -> str:
     if reportable_value[0] == "P":
         return f"> {int(reportable_value[1:])} ft"
     return f"{int(reportable_value)} ft"
+
+
+def _saturation_vapor_pressure(temperature: float) -> float:
+    return 6.112 * math.exp((17.67 * temperature) / (temperature + 243.5))
 
 
 def aviationweather_get_metar(station_id: str) -> MetarObservation:
@@ -163,14 +167,9 @@ class MetarTemperature:
     def relative_humidity(self) -> float | None:
         if self._dew_point_c is None:
             return None
-        saturation_vapor_pressure = 6.11 * 10 ** (
-            (7.5 * self._temp_c) / (237.3 + self._temp_c)
-        )
-        actual_vapor_pressure = 6.11 * 10 ** (
-            (7.5 * self._dew_point_c) / (237.3 + self._dew_point_c)
-        )
-        rh = (actual_vapor_pressure / saturation_vapor_pressure) * 100
-        return round(rh, 1)
+        air_sat_vapor = _saturation_vapor_pressure(self._temp_c)
+        dp_sat_vapor = _saturation_vapor_pressure(self._dew_point_c)
+        return round((dp_sat_vapor / air_sat_vapor) * 100, 1)
 
     def heat_index(self, unit: str = "F") -> float | None:
         temp_f = self.temperature("F")
