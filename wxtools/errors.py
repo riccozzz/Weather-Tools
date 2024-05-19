@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -19,8 +20,12 @@ class UnitConversionError(Exception):
     """Exception for unit conversion errors."""
 
 
+class AviationWeatherError(Exception):
+    """Exception for aviationweather.gov API requests."""
+
+
 @dataclass
-class ErrorDetails:
+class NwsErrorDetails:
     """
     An object that holds information for a problematic JSON response.
 
@@ -53,9 +58,9 @@ class ErrorDetails:
     parameter_errors: Optional[list[dict[str, str]]] = None
 
     @classmethod
-    def from_json(cls, jdata: dict[str, Any], url: str) -> ErrorDetails:
+    def from_json(cls, jdata: dict[str, Any], url: str) -> NwsErrorDetails:
         """
-        Constructs an ErrorDetails object using the JSON data returned from the
+        Constructs an NwsErrorDetails object using the JSON data returned from the
         National Wweather Service public API.
 
         Required Parameters:

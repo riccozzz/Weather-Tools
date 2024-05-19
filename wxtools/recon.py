@@ -1,6 +1,7 @@
 """
 Decoding of tropical cyclone aircraft recon. missions and text products
 """
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional

@@ -2,6 +2,7 @@
 Module with a static dictionary and helpers for known ICAO airport codes. For
 now, this is mostly just for the US.
 """
+
 from __future__ import annotations
 
 

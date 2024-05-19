@@ -1,6 +1,7 @@
 """
 Module with a static dictionary of unit information.
 """
+
 from dataclasses import dataclass
 from typing import Optional
 

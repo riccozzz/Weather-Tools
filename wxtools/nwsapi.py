@@ -6,12 +6,15 @@ args to include them,
 
 https://www.weather.gov/documentation/services-web-api
 """
-from collections.abc import Iterable, Collection
+
+from collections.abc import Collection, Iterable
 from datetime import datetime
 from typing import Any, Optional, Union
+
 import requests
 from requests.utils import requote_uri
-from .errors import ErrorDetails, NwsDataError, NwsResponseError
+
+from .errors import NwsErrorDetails, NwsResponseError, NwsDataError
 
 
 def _create_param_str(**params: Any) -> str:
@@ -125,7 +128,7 @@ def get(endpoint: str, **params: Any) -> requests.Response:
         if resp.status_code >= 400:
             jdata = resp.json()
             if isinstance(jdata, dict):
-                error = ErrorDetails.from_json(jdata, full_url)
+                error = NwsErrorDetails.from_json(jdata, full_url)
                 raise NwsResponseError(error)
         resp.raise_for_status()
         return resp

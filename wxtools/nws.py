@@ -1,7 +1,9 @@
 """
 High level objects for data from the National Weather Service.
 """
+
 from __future__ import annotations
+
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, tzinfo
