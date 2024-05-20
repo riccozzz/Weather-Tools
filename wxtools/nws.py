@@ -15,7 +15,7 @@ from shapely.geometry import Point
 
 from .errors import NwsDataError
 from .nwsapi import points, station_observations_latest, stations_id
-from .units import UnitInfo, convert, unit_by_label, unit_by_namespace
+from .units import UnitInfo, convert_unit, unit_by_label, unit_by_namespace
 
 
 class MadisQualityControl:
@@ -199,15 +199,15 @@ class Measurement:
         if to_unit == self._unit:
             return self
         if self._value is not None:
-            conv_value = convert(self._value, self._unit, to_unit)
+            conv_value = convert_unit(self._value, self._unit, to_unit)
         else:
             conv_value = None
         if self._min_value is not None:
-            conv_min = convert(self._min_value, self._unit, to_unit)
+            conv_min = convert_unit(self._min_value, self._unit, to_unit)
         else:
             conv_min = None
         if self._max_value is not None:
-            conv_max = convert(self._max_value, self._unit, to_unit)
+            conv_max = convert_unit(self._max_value, self._unit, to_unit)
         else:
             conv_max = None
         return Measurement(
@@ -265,11 +265,11 @@ class Measurement:
         if to_unit == self._unit:
             return
         if self._value is not None:
-            self._value = convert(self._value, self._unit, to_unit)
+            self._value = convert_unit(self._value, self._unit, to_unit)
         if self._min_value is not None:
-            self._min_value = convert(self._min_value, self._unit, to_unit)
+            self._min_value = convert_unit(self._min_value, self._unit, to_unit)
         if self._max_value is not None:
-            self._max_value = convert(self._max_value, self._unit, to_unit)
+            self._max_value = convert_unit(self._max_value, self._unit, to_unit)
         self._unit = to_unit
 
 
@@ -308,26 +308,26 @@ class Temperature:
         if self.temperature.value is None:
             return "Temperature not available"
         if self.temperature.unit.label == "fahrenheit":
-            convert_unit = unit_by_label("celsius")
+            convert_to_unit = unit_by_label("celsius")
         else:
-            convert_unit = unit_by_label("fahrenheit")
-        sb = f"{self.temperature} ({self.temperature.as_unit(convert_unit)})"
+            convert_to_unit = unit_by_label("fahrenheit")
+        sb = f"{self.temperature} ({self.temperature.as_unit(convert_to_unit)})"
         if self.dew_point.value is not None:
             sb = (
                 f"{sb}, Dew Point {self.dew_point} "
-                f"({self.dew_point.as_unit(convert_unit)})"
+                f"({self.dew_point.as_unit(convert_to_unit)})"
             )
             if self.relative_humidity.value is not None:
                 sb = f"{sb}, Humidity {self.relative_humidity}"
         if self.heat_index.value is not None:
             sb = (
                 f"{sb}, Feels Like {self.heat_index} "
-                f"({self.heat_index.as_unit(convert_unit)})"
+                f"({self.heat_index.as_unit(convert_to_unit)})"
             )
         elif self.wind_chill.value is not None:
             sb = (
                 f"{sb}, Feels Like {self.wind_chill} "
-                f"({self.wind_chill.as_unit(convert_unit)})"
+                f"({self.wind_chill.as_unit(convert_to_unit)})"
             )
         return sb
 

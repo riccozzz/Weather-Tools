@@ -147,9 +147,9 @@ class MetarTemperature:
         sb = f"{self.temperature('C')}°C ({self.temperature('F')}°F)"
         if self._dew_point_c is not None:
             sb = f"{sb}, DP {self.dew_point('C')}°C ({self.dew_point('F')}°F)"
-            sb = f"{sb}, RH {self.relative_humidity()}%"
-            sb = f"{sb}, Heat Index {self.heat_index('C')}°C ({self.heat_index('F')}°F)"
-            sb = f"{sb}, Wet Bulb {self.wet_bulb('C')}°C ({self.wet_bulb('F')}°F)"
+            # sb = f"{sb}, RH {self.relative_humidity()}%"
+            # sb = f"{sb}, Heat Index {self.heat_index('C')}°C ({self.heat_index('F')}°F)"
+            # sb = f"{sb}, Wet Bulb {self.wet_bulb('C')}°C ({self.wet_bulb('F')}°F)"
         return sb
 
     def temperature(self, unit: str = "C") -> float:
@@ -163,56 +163,6 @@ class MetarTemperature:
         if unit == "C":
             return round(self._dew_point_c, 1)
         return round((self._dew_point_c * 9 / 5) + 32, 1)
-
-    def relative_humidity(self) -> float | None:
-        if self._dew_point_c is None:
-            return None
-        air_sat_vapor = _saturation_vapor_pressure(self._temp_c)
-        dp_sat_vapor = _saturation_vapor_pressure(self._dew_point_c)
-        return round((dp_sat_vapor / air_sat_vapor) * 100, 1)
-
-    def heat_index(self, unit: str = "F") -> float | None:
-        temp_f = self.temperature("F")
-        rh = self.relative_humidity()
-        if rh is None:
-            return None
-        heat_index = 0.5 * (temp_f + 61.0 + ((temp_f - 68.0) * 1.2) + (rh * 0.094))
-        if heat_index >= 80:
-            heat_index = (
-                -42.379
-                + 2.04901523 * temp_f
-                + 10.14333127 * rh
-                - 0.22475541 * temp_f * rh
-                - 0.00683783 * temp_f * temp_f
-                - 0.05481717 * rh * rh
-                + 0.00122874 * temp_f * temp_f * rh
-                + 0.00085282 * temp_f * rh * rh
-                - 0.00000199 * temp_f * temp_f * rh * rh
-            )
-            if rh < 13.0 and temp_f >= 80.0 and temp_f <= 112.0:
-                heat_index -= ((13 - rh) / 4) * math.sqrt(
-                    (17 - abs(temp_f - 95.0)) / 17
-                )
-            elif rh > 85 and temp_f >= 80.0 and temp_f <= 87:
-                heat_index += ((rh - 85) / 10) * ((87 - temp_f) / 5)
-        if unit == "F":
-            return round(heat_index, 1)
-        return round((temp_f - 32) * 5 / 9, 1)
-
-    def wet_bulb(self, unit: str = "C") -> float | None:
-        rh = self.relative_humidity()
-        if rh is None:
-            return None
-        wet_bulb = (
-            self._temp_c * math.atan(0.151977 * math.sqrt(rh + 8.313659))
-            + 0.00391838 * math.sqrt(rh**3) * math.atan(0.023101 * rh)
-            - math.atan(rh - 1.676331)
-            + math.atan(self._temp_c + rh)
-            - 4.686035
-        )
-        if unit == "C":
-            return round(wet_bulb, 1)
-        return round((wet_bulb * 9 / 5) + 32, 1)
 
 
 class MetarWind:
@@ -560,6 +510,16 @@ class MetarObservation:
             return str(MetarTemperature(self._temperature))
         return "Unspecified"
 
+    def altimeter(self) -> str:
+        inhg = float(f"{self._altimeter[1:3]}.{self._altimeter[3:5]}")
+        hpa = round(inhg * 33.86389, 1)
+        return f"{inhg} inHg ({hpa} hPa)"
+
+    def remarks(self) -> str:
+        if self._remarks is None or len(self._remarks) < 1:
+            return "Unspecified"
+        return self._remarks
+
     def decode(self) -> str:
         """Decodes the entire observation and outputs a pretty report."""
         return (
@@ -574,6 +534,8 @@ class MetarObservation:
             f"Present Weather -- {self.present_weather()}\n"
             f"Sky Conditions -- {self.sky_condition()}\n"
             f"Temperature -- {self.temperature()}\n"
+            f"Altimeter -- {self.altimeter()}\n"
+            f"Remarks -- {self.remarks()}"
         )
 
     def _pop_report_type(self, observations: list[str]) -> str | None:

@@ -888,23 +888,35 @@ def unit_by_namespace(unit_namespace: str) -> UnitInfo:
     raise ValueError(f"Cannot parse namespace unit '{unit_namespace}'.")
 
 
-def convert(value: float, from_unit: UnitInfo, to_unit: UnitInfo) -> float:
+def convert_unit(
+    value: float, from_unit: UnitInfo | str, to_unit: UnitInfo | str
+) -> float:
     """
     Converts a floating point value from one unit to another. The two units
-    must be of the same kind (ie both 'temperature' or 'length').
+    must be of the same kind (ie both 'temperature' or 'length'). If strings
+    are provided instead of UnitInfo, then it will look up the unit by using
+    the unit_by_label() method, requiring the full label of the unit.
 
     Raises:
     * ConversionError -- If the units are incompatible.
     """
-    if from_unit.unit_kind != to_unit.unit_kind:
+    if isinstance(from_unit, str):
+        from_uinfo = unit_by_label(from_unit)
+    else:
+        from_uinfo = from_unit
+    if isinstance(to_unit, str):
+        to_uinfo = unit_by_label(to_unit)
+    else:
+        to_uinfo = to_unit
+    if from_uinfo.unit_kind != to_uinfo.unit_kind:
         raise UnitConversionError(
             f"Invalid unit types for conversion. from_unit is "
-            f"'{from_unit.unit_kind}' and to_unit is '{to_unit.unit_kind}'."
+            f"'{from_uinfo.unit_kind}' and to_unit is '{to_uinfo.unit_kind}'."
         )
-    if from_unit.unit_kind == "temperature":
-        if from_unit.label == "fahrenheit":
-            from_base = from_unit.conv_factor * (value + from_unit.conv_offset)
+    if from_uinfo.unit_kind == "temperature":
+        if from_uinfo.label == "fahrenheit":
+            from_base = from_uinfo.conv_factor * (value + from_uinfo.conv_offset)
         else:
-            from_base = from_unit.conv_factor * value + from_unit.conv_offset
-        return from_base / to_unit.conv_factor - to_unit.conv_offset
-    return (from_unit.conv_factor * value) / to_unit.conv_factor
+            from_base = from_uinfo.conv_factor * value + from_uinfo.conv_offset
+        return from_base / to_uinfo.conv_factor - to_uinfo.conv_offset
+    return (from_uinfo.conv_factor * value) / to_uinfo.conv_factor

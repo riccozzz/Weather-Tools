@@ -14,7 +14,7 @@ from typing import Any, Optional, Union
 import requests
 from requests.utils import requote_uri
 
-from .errors import NwsErrorDetails, NwsResponseError, NwsDataError
+from .errors import NwsDataError, NwsErrorDetails, NwsResponseError
 
 
 def _create_param_str(**params: Any) -> str:
