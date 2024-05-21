@@ -209,35 +209,6 @@ def wet_bulb(temperature: float, rel_humidity: float, unit: str) -> float:
     return _convert_temperature(wb_c, current_unit="C", to_unit=unit, error_check=False)
 
 
-def apparent_temperature(
-    temperature: float,
-    rel_humidity: float,
-    wind_speed: float,
-    temp_unit: str,
-    wind_unit: str,
-) -> float:
-    """
-    Calculates estimated apparent temperature given air temperature, relative
-    humidity, and wind speed. Ideal for the 50F -> 80F temperature range,
-    where wind chill and heat index lose accuracy.
-
-    A simplified formula based on Steadmans original apparent temperature.
-
-    Parameters:
-        * temperature (float) -- Air temperature value in degrees.
-        * rel_humidity (float) -- Relative humidity percentage.
-        * wind_speed (float) -- Speed of wind value.
-        * temp_unit (str) -- Unit of temperature, either 'C' or 'F'.
-        * wind_unit (str) -- Unit of wind speed, either 'KTS' or 'MPH'.
-    """
-    temp_f = _convert_temperature(temperature, current_unit=temp_unit, to_unit="F")
-    wind_mph = _convert_wind_speed(wind_speed, current_unit=wind_unit, to_unit="MPH")
-    apparent_temp = temp_f + 0.33 * rel_humidity - 0.7 * wind_mph - 4
-    return _convert_temperature(
-        apparent_temp, current_unit="F", to_unit=temp_unit, error_check=False
-    )
-
-
 def feels_like(
     temperature: float,
     rel_humidity: float,
@@ -247,9 +218,8 @@ def feels_like(
 ) -> float:
     """
     Calculates estimated "feels like" temperature given air temperature,
-    relative humidity, and wind speed. For temperatures below 50F, the result
-    will be wind chill. Between 50F and 80F will be estimated apparent
-    temperature. Above 80F will be heat index.
+    relative humidity, and wind speed. For temperatures below or equal to 50F,
+    the result will be wind chill. Above 50F will be heat index.
 
     Parameters:
         * temperature (float) -- Air temperature value in degrees.
@@ -262,8 +232,6 @@ def feels_like(
     wind_mph = _convert_wind_speed(wind_speed, current_unit=wind_unit, to_unit="MPH")
     if temp_f <= 50:
         feeling_f = wind_chill(temp_f, wind_mph, "F", "MPH")
-    elif temp_f > 50 and temp_f < 80:
-        feeling_f = apparent_temperature(temp_f, rel_humidity, wind_mph, "F", "MPH")
     else:
         feeling_f = heat_index(temp_f, rel_humidity, "F")
     return _convert_temperature(
