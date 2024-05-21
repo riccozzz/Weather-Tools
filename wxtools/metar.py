@@ -4,20 +4,14 @@ Experimenting with parsing METAR data into a python object.
 
 from __future__ import annotations
 
-from typing import Any
-
-
-def _quotify(value: Any) -> str:
-    """
-    Returns str(value), if input value is already a string we wrap it in single
-    quotes.
-    """
-    return f"'{value}'" if isinstance(value, str) else str(value)
+from .common import quotify
 
 
 class MetarObservation:
     """
-    Python object for storing and decoding a standard METAR message.
+    Python object for storing a METAR/SPECI string. Splits the groups out into
+    variables but does no further decoding. str(self) will return the raw coded
+    string.
     """
 
     _report_types = {
@@ -70,25 +64,25 @@ class MetarObservation:
         self.sky_condition = self._pop_sky_condition(observations)
         # We handled everything but weather phenomena, so combine the rest
         self.present_weather = self._pop_present_weather(observations)
-        # Remarks
+        # Just keep remarks as a single unsplit string
         self.remarks = None
         if len(split_obs) > 1:
             self.remarks = split_obs[1]
 
     def __repr__(self) -> str:
         sb = f"{self.__class__.__name__}(\n"
-        sb = f"{sb}    report_type={_quotify(self.report_type)},\n"
-        sb = f"{sb}    station_id={_quotify(self.station_id)},\n"
-        sb = f"{sb}    date_time={_quotify(self.date_time)},\n"
-        sb = f"{sb}    report_modifier={_quotify(self.report_modifier)},\n"
-        sb = f"{sb}    wind={_quotify(self.wind)},\n"
-        sb = f"{sb}    visibility={_quotify(self.visibility)},\n"
-        sb = f"{sb}    runway_visual_range={_quotify(self.runway_visual_range)},\n"
-        sb = f"{sb}    present_weather={_quotify(self.present_weather)},\n"
-        sb = f"{sb}    sky_condition={_quotify(self.sky_condition)},\n"
-        sb = f"{sb}    temperature={_quotify(self.temperature)},\n"
-        sb = f"{sb}    altimeter={_quotify(self.altimeter)},\n"
-        sb = f"{sb}    remarks={_quotify(self.remarks)},\n"
+        sb = f"{sb}    report_type={quotify(self.report_type)},\n"
+        sb = f"{sb}    station_id={quotify(self.station_id)},\n"
+        sb = f"{sb}    date_time={quotify(self.date_time)},\n"
+        sb = f"{sb}    report_modifier={quotify(self.report_modifier)},\n"
+        sb = f"{sb}    wind={quotify(self.wind)},\n"
+        sb = f"{sb}    visibility={quotify(self.visibility)},\n"
+        sb = f"{sb}    runway_visual_range={quotify(self.runway_visual_range)},\n"
+        sb = f"{sb}    present_weather={quotify(self.present_weather)},\n"
+        sb = f"{sb}    sky_condition={quotify(self.sky_condition)},\n"
+        sb = f"{sb}    temperature={quotify(self.temperature)},\n"
+        sb = f"{sb}    altimeter={quotify(self.altimeter)},\n"
+        sb = f"{sb}    remarks={quotify(self.remarks)},\n"
         return f"{sb})"
 
     def __str__(self) -> str:
