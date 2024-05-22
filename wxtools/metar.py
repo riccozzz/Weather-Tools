@@ -5,13 +5,15 @@ Experimenting with parsing METAR data into a python object.
 from __future__ import annotations
 
 from .common import quotify
+from .units import _ALL_UNITS
 
 
-class MetarObservation:
+class CodedMetar:
     """
     Python object for storing a METAR/SPECI string. Splits the groups out into
-    variables but does no further decoding. str(self) will return the raw coded
-    string.
+    variables but does no further parsing. str(self) will return the raw coded
+    string back. Each group can be accessed via variables, which will be None
+    if they are not present.
     """
 
     _report_types = {
@@ -36,7 +38,7 @@ class MetarObservation:
 
     def __init__(self, metar_observation: str) -> None:
         """
-        Creates a MetarObservation object with the given observation string.
+        Creates a CodedMetar object with the given observation string.
 
         Parameters:
         * metar_observation (str) -- Full METAR observation string
@@ -212,3 +214,167 @@ class MetarObservation:
             if remark.startswith("SLP") and len(remark) == 6:
                 return remark
         return None
+
+
+class MetarWind:
+    """Object for parsing/decoding the wind group from a coded METAR."""
+
+    _unit_kts = _ALL_UNITS["knot"]
+    _unit_mph = _ALL_UNITS["mile per hour"]
+    _unit_mps = _ALL_UNITS["meter per second"]
+    _unit_kph = _ALL_UNITS["kilometer per hour"]
+
+    _CARDINAL_DIRECTIONS = (
+        "North",
+        "North-Northeast",
+        "Northeast",
+        "East-Northeast",
+        "East",
+        "East-Southeast",
+        "Southeast",
+        "South-Southeast",
+        "South",
+        "South-Southwest",
+        "Southwest",
+        "West-Southwest",
+        "West",
+        "West-Northwest",
+        "Northwest",
+        "North-Northwest",
+    )
+
+    _CARDINAL_DIRECTIONS_ARROW = (
+        "⬇",
+        "⬇",
+        "⬋",
+        "⬅",
+        "⬅",
+        "⬅",
+        "⬉",
+        "⬆",
+        "⬆",
+        "⬆",
+        "⬈",
+        "➡",
+        "➡",
+        "➡",
+        "⬊",
+        "⬇",
+    )
+
+    _CARDINAL_DIRECTIONS_ABBR = (
+        "N",
+        "NNE",
+        "NE",
+        "ENE",
+        "E",
+        "ESE",
+        "SE",
+        "SSE",
+        "S",
+        "SSW",
+        "SW",
+        "WSW",
+        "W",
+        "WNW",
+        "NW",
+        "NNW",
+    )
+
+    def __init__(self, metar_wind_group: str) -> None:
+        self.wind_group = metar_wind_group.upper()
+        # Default values indicate calm wind
+        self.speed: int = 0
+        self.gust: int | None = None
+        self.direction: int | None = None
+        self.variable_directions: tuple[int, int] | None = None
+        # Parse the string
+        if self.wind_group.startswith("VRB"):
+            # Variable wind < 6kts, indicated by keeping direction None
+            self.speed = int(self.wind_group[3:5])
+        elif self.wind_group != "00000KT":
+            groups = self.wind_group.split()
+            gust_spl = groups[0][0:-2].split("G")
+            self.direction = int(gust_spl[0][0:3])
+            self.speed = int(gust_spl[0][3:])
+            if len(gust_spl) > 1:
+                self.gust = int(gust_spl[1])
+            if len(groups) > 1:
+                var_spl = groups[1].split("V")
+                self.variable_directions = (int(var_spl[0]), int(var_spl[1]))
+        # METAR is always knots, so set that as our speed unit to start
+        self.speed_unit = self._unit_kts
+
+    def __repr__(self) -> str:
+        sb = f"{self.__class__.__name__}(\n"
+        sb = f"{sb}    wind_group={quotify(self.wind_group)},\n"
+        sb = f"{sb}    speed={quotify(self.speed)},\n"
+        sb = f"{sb}    gust={quotify(self.gust)},\n"
+        sb = f"{sb}    direction={quotify(self.direction)},\n"
+        sb = f"{sb}    variable_directions={quotify(self.variable_directions)},\n"
+        sb = f"{sb}    speed_unit={quotify(self.speed_unit)},\n"
+        return f"{sb})"
+
+    def __str__(self) -> str:
+        return self.description()
+
+    def description(self) -> str:
+        """
+        Outputs a human readable description of the decoded wind observations.
+        """
+        if self.speed == 0 and self.gust is None:
+            return "Calm"
+        if self.direction is None:
+            return f"{self.speed} {self.speed_unit} from varying directions"
+        sb = f"{self.speed} {self.speed_unit}"
+        sb = f"{sb} from the {self.cardinal_direction(self.direction)}"
+        if self.gust is not None:
+            sb = f"{sb}, gusting {self.gust} {self.speed_unit}"
+        if self.variable_directions is not None:
+            v1 = self.cardinal_direction(self.variable_directions[0])
+            v2 = self.cardinal_direction(self.variable_directions[1])
+            sb = f"{sb}, varying from {v1} and {v2}"
+        return sb
+
+    @classmethod
+    def from_coded_metar(cls, metar: CodedMetar) -> MetarWind | None:
+        """
+        Creates a decoded MetarWind object from a CodedMetar. This will simply
+        use CodedMetar.wind to construct the object. If wind is not present,
+        this method will return None.
+        """
+        if metar.wind is None:
+            return None
+        return cls(metar.wind)
+
+    @staticmethod
+    def cardinal_direction(direction: int, style: str = "shortarrow") -> str:
+        """
+        The cardinal direction of the specified wind direction value.
+
+        Parameters:
+        * direction (int) -- Direction of wind in 0-360 degrees.
+        * style (str) -- The style of string to be returned. Possible values
+        are 'short', 'long', 'arrow', 'shortarrow', 'degrees'. Defaults to
+        'shortarrow'.
+
+        Examples of each style for northeasterly wind:
+        * 'short' -> 'NE'
+        * 'long' -> 'Northeast'
+        * 'arrow' -> '⬋'
+        * 'shortarrow -> 'NE ⬋'
+        * 'degrees' -> '45°'
+        """
+        cfstyle = style.casefold()
+        cardinal_index = int(round(direction / 22.5) % 16)
+        if cfstyle == "arrow":
+            return MetarWind._CARDINAL_DIRECTIONS_ARROW[cardinal_index]
+        if cfstyle == "long":
+            return MetarWind._CARDINAL_DIRECTIONS[cardinal_index]
+        if cfstyle == "degrees":
+            return f"{direction}°"
+        if cfstyle == "shortarrow":
+            arrow = MetarWind._CARDINAL_DIRECTIONS_ARROW[cardinal_index]
+            abbr = MetarWind._CARDINAL_DIRECTIONS_ABBR[cardinal_index]
+            return f"{abbr} {arrow}"
+        return MetarWind._CARDINAL_DIRECTIONS_ABBR[cardinal_index]

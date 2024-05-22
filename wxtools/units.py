@@ -45,7 +45,7 @@ class UnitInfo:
     conv_offset: float
 
     def __str__(self) -> str:
-        return self.label.capitalize()
+        return self.symbol
 
 
 _ALL_UNITS: dict[str, UnitInfo] = {
