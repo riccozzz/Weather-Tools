@@ -5,14 +5,6 @@ from __future__ import annotations
 import requests
 
 
-def _rvr_parse(reportable_value: str) -> str:
-    if reportable_value[0] == "M":
-        return f"< {int(reportable_value[1:])} ft"
-    if reportable_value[0] == "P":
-        return f"> {int(reportable_value[1:])} ft"
-    return f"{int(reportable_value)} ft"
-
-
 def aviationweather_get_metar(station_id: str) -> str:
     """Returns the latest METAR from the given station."""
 
@@ -81,55 +73,12 @@ def synopticdata_get(station_id: str) -> str:
         raise RuntimeError(ex) from None
 
 
-# class MetarTemperature:
-#     """Object for parsing temperature from a METAR string."""
-
-#     def __init__(self, metar_temp: str) -> None:
-#         self._raw_metar = metar_temp.upper().strip()
-#         self._temp_c: float = 0
-#         self._dew_point_c: float | None = None
-#         if len(self._raw_metar) == 9:
-#             # Remarks data
-#             self._temp_c = int(self._raw_metar[2:5]) / 10
-#             if self._raw_metar[1] == "1":
-#                 self._temp_c *= -1
-#             self._dew_point_c = int(self._raw_metar[6:9]) / 10
-#             if self._raw_metar[5] == "1":
-#                 self._dew_point_c *= -1
-#         else:
-#             # Normal metar data
-#             parts = self._raw_metar.replace("M", "-").split("/")
-#             self._temp_c = float(parts[0])
-#             if len(parts) > 1 and len(parts[1]) > 0:
-#                 self._dew_point_c = float(parts[1])
-
-#     def __repr__(self) -> str:
-#         sb = f"{self.__class__.__name__}("
-#         sb = f"{sb}_raw_metar={_quotify(self._raw_metar)},"
-#         sb = f"{sb} _temp_c={_quotify(self._temp_c)},"
-#         sb = f"{sb} _dew_point_c={_quotify(self._dew_point_c)})"
-#         return sb
-
-#     def __str__(self) -> str:
-#         sb = f"{self.temperature('C')}°C ({self.temperature('F')}°F)"
-#         if self._dew_point_c is not None:
-#             sb = f"{sb}, DP {self.dew_point('C')}°C ({self.dew_point('F')}°F)"
-#             # sb = f"{sb}, RH {self.relative_humidity()}%"
-#        # sb = f"{sb}, Heat Index {self.heat_index('C')}°C ({self.heat_index('F')}°F)"
-#             # sb = f"{sb}, Wet Bulb {self.wet_bulb('C')}°C ({self.wet_bulb('F')}°F)"
-#         return sb
-
-#     def temperature(self, unit: str = "C") -> float:
-#         if unit == "C":
-#             return round(self._temp_c, 1)
-#         return round((self._temp_c * 9 / 5) + 32, 1)
-
-#     def dew_point(self, unit: str = "C") -> float | None:
-#         if self._dew_point_c is None:
-#             return None
-#         if unit == "C":
-#             return round(self._dew_point_c, 1)
-#         return round((self._dew_point_c * 9 / 5) + 32, 1)
+# def _rvr_parse(reportable_value: str) -> str:
+#     if reportable_value[0] == "M":
+#         return f"< {int(reportable_value[1:])} ft"
+#     if reportable_value[0] == "P":
+#         return f"> {int(reportable_value[1:])} ft"
+#     return f"{int(reportable_value)} ft"
 
 # class MetarRemarks:
 #     """
@@ -223,32 +172,3 @@ def synopticdata_get(station_id: str) -> str:
 #         if end_loc_index == -1:
 #             return metar_remarks[freq_index:]
 #         return metar_remarks[freq_index:end_loc_index]
-
-
-# def sky_condition(self) -> str:
-#     """Sky Condition Group"""
-#     if self._sky_condition == "CLR" or self._sky_condition == "SKC":
-#         return "Clear skies"
-#     sb = ""
-#     for cond in self._sky_condition.split():
-#         contraction = self._sky_conditions[cond[0:3]]
-#         if "/" in cond:
-#             height = "[below station]"
-#         else:
-#             height = f"{int(cond[3:]) * 100}"
-#         sb = f"{sb}, {contraction} at {height} ft"
-#     return sb.strip(" ,")
-
-# def temperature(self) -> str:
-#     """Temperature/Dew Point Group"""
-#     remarks_temp = self._remarks_temp()
-#     if remarks_temp is not None:
-#         return str(MetarTemperature(remarks_temp))
-#     if self._temperature is not None:
-#         return str(MetarTemperature(self._temperature))
-#     return "Unspecified"
-
-# def altimeter(self) -> str:
-#     inhg = float(f"{self._altimeter[1:3]}.{self._altimeter[3:5]}")
-#     hpa = round(inhg * 33.86389, 1)
-#     return f"{inhg} inHg ({hpa} hPa)"
