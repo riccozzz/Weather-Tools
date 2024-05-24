@@ -256,20 +256,36 @@ class MetarObservations:
 
     def report(self) -> str:
         """Creates a full human readable report."""
-        sb = f"\nLatest report for {self.station_id}"
+        # Header, station id and name
         if self.station_name is not None:
-            sb = f"{sb} ({self.station_name})"
-        sb = f"{sb}\n\n{self.coded_metar}"
-        sb = f"{sb}\n\nTimestamp -- {self.timestamp}"
-        sb = f"{sb} ({self._minutes_since()} minutes ago)"
-        if self.wind is None:
-            sb = f"{sb}\nWind -- Unspecified"
+            sb = f"{self.station_id} ({self.station_name})"
         else:
-            sb = f"{sb}\nWind -- {self.wind}"
-        sb = f"{sb}\nVisibility -- {self.visibility}"
-        sb = f"{sb}\nPressure -- {self.pressure}"
-        sb = f"{sb}\nTemperature -- {self.temperature}"
-        sb = f"{sb}\nSky Condition -- {self.sky_conditions}"
+            sb = self.station_id
+        # Raw METAR
+        sb = f"{sb}\n\nMETAR (via aviationweather.gov):\n'{self.coded_metar}'"
+        # Timestamp (acts as data header)
+        ts = self.timestamp.strftime("%B %d, %Y at %H:%M UTC")
+        sb = f"{sb}\n\nObserved on {ts} ({self._minutes_since()} minutes ago)\n"
+        # Wind
+        if self.wind is None:
+            sb = f"{sb}\nWind:\n    Unspecified"
+        else:
+            sb = f"{sb}\nWind:\n    {self.wind}"
+        # Visibility
+        sb = f"{sb}\nVisibility:\n    {self.visibility}"
+        # Pressure
+        sb = f"{sb}\nPressure:\n"
+        alt_hpa = f"{self.pressure.altimeter:.1f}"
+        if self.pressure.sea_level_pressure is not None:
+            slp_hpa = f"{self.pressure.sea_level_pressure:.1f}"
+        self.pressure.unit = "inhg"  # type: ignore
+        alt_inhg = f"{self.pressure.altimeter:.2f}"
+        if self.pressure.sea_level_pressure is not None:
+            slp_inhg = f"{self.pressure.sea_level_pressure:.2f}"
+        self.pressure.unit = "hpa"  # type: ignore
+        sb = f"{sb}    Altimeter -- {alt_hpa} hPa ({alt_inhg} inHg)\n"
+        if self.pressure.sea_level_pressure is not None:
+            sb = f"{sb}    Sea Level -- {slp_hpa} hPa ({slp_inhg} inHg)\n"
         return sb
 
     def _parse_date_time(self, date_group: str) -> datetime:
@@ -296,15 +312,32 @@ class MetarObservations:
         return round(seconds / 60)
 
 
+@dataclass
+class SkyLayer:
+    """Dataclass for a sky condition layer from a METAR."""
+
+    descriptions = {
+        "CLR": "Clear",
+        "SKC": "Clear",
+        "FEW": "Few",
+        "SCT": "Scattered",
+        "BKN": "Broken",
+        "OVC": "Overcast",
+        "VV": "Vertical Visibility",
+    }
+
+    coverage: str
+    height: float | None
+
+    @property
+    def coverage_description(self) -> str:
+        """A descriptive string for the corresponding METAR abbreviation."""
+        return self.descriptions[self.coverage]
+
+
 class MetarWind:
     """
     Object for parsing/decoding the wind group from a coded METAR.
-
-    Possible unit values (case insensitive):
-        * 'kt' -- Knots (default)
-        * 'mph' -- Miles per hour
-        * 'kph' -- Kilometers per hours
-        * 'mps' -- Meters per second
     """
 
     _unit_kts = _ALL_UNITS["knot"]
@@ -334,8 +367,8 @@ class MetarWind:
                 var_spl = groups[1].split("V")
                 self.variable_directions = (int(var_spl[0]), int(var_spl[1]))
         # Set the unit and convert if required
-        self._speed_unit = self._unit_kts
-        self._convert_unit(self._uinfo_from_str(unit))
+        self._unit = self._unit_kts
+        self.set_unit(unit)
 
     def __repr__(self) -> str:
         sb = f"{self.__class__.__name__}(\n"
@@ -344,7 +377,7 @@ class MetarWind:
         sb = f"{sb}    gust={quotify(self.gust)},\n"
         sb = f"{sb}    direction={quotify(self.direction)},\n"
         sb = f"{sb}    variable_directions={quotify(self.variable_directions)},\n"
-        sb = f"{sb}    speed_unit={quotify(self.speed_unit)},\n"
+        sb = f"{sb}    unit={quotify(self.unit)},\n"
         return f"{sb})"
 
     def __str__(self) -> str:
@@ -362,13 +395,37 @@ class MetarWind:
             return self._unit_mps
         raise RuntimeError(f"Invalid unit specified: '{unit}'")
 
-    def _convert_unit(self, to_unit: UnitInfo) -> None:
-        if to_unit == self._speed_unit:
+    def as_unit(self, unit: str) -> MetarWind:
+        """
+        Converts the value to the specified unit, and returns a new object.
+        Does not modify the unit of the current object.
+
+        Possible string values (case insensitive):
+        * 'kt' -- Knots (default from METAR)
+        * 'mph' -- Miles per hour
+        * 'kph' -- Kilometers per hours
+        * 'mps' -- Meters per second
+        """
+        return MetarWind(self.wind_group, unit)
+
+    def set_unit(self, to_unit: UnitInfo | str) -> None:
+        """
+        Converts the value to the specified unit in place.
+
+        Possible string values (case insensitive):
+        * 'kt' -- Knots (default from METAR)
+        * 'mph' -- Miles per hour
+        * 'kph' -- Kilometers per hours
+        * 'mps' -- Meters per second
+        """
+        if isinstance(to_unit, str):
+            to_unit = self._uinfo_from_str(to_unit)
+        if to_unit == self._unit:
             return
-        self.speed = convert_unit(self.speed, self._speed_unit, to_unit)
+        self.speed = convert_unit(self.speed, self._unit, to_unit)
         if self.gust is not None:
-            self.gust = convert_unit(self.gust, self._speed_unit, to_unit)
-        self._speed_unit = to_unit
+            self.gust = convert_unit(self.gust, self._unit, to_unit)
+        self._unit = to_unit
 
     def description(self) -> str:
         """
@@ -377,11 +434,11 @@ class MetarWind:
         if self.speed == 0 and self.gust is None:
             return "Calm"
         if self.direction is None:
-            return f"{self.speed:.0f} {self.speed_unit} from varying directions"
-        sb = f"{self.speed:.0f} {self.speed_unit}"
+            return f"{self.speed:.0f} {self.unit} from varying directions"
+        sb = f"{self.speed:.0f} {self.unit}"
         sb = f"{sb} from the {cardinal_direction(self.direction)}"
         if self.gust is not None:
-            sb = f"{sb}, gusting {self.gust:.0f} {self.speed_unit}"
+            sb = f"{sb}, gusting {self.gust:.0f} {self.unit}"
         if self.variable_directions is not None:
             v1 = cardinal_direction(self.variable_directions[0])
             v2 = cardinal_direction(self.variable_directions[1])
@@ -389,23 +446,9 @@ class MetarWind:
         return sb
 
     @property
-    def speed_unit(self) -> UnitInfo:
-        """
-        The current unit (UnitInfo object) of the wind speeds. If set to one
-        of the below strings, will convert the values in place and set the new
-        UnitInfo appropriately.
-
-        Possible set values (case insensitive):
-        * 'kt' -- Knots (default from METAR)
-        * 'mph' -- Miles per hour
-        * 'kph' -- Kilometers per hours
-        * 'mps' -- Meters per second
-        """
-        return self._speed_unit
-
-    @speed_unit.setter
-    def speed_unit(self, unit: str) -> None:
-        self._convert_unit(self._uinfo_from_str(unit))
+    def unit(self) -> UnitInfo:
+        """The current unit (UnitInfo object) of the wind speeds."""
+        return self._unit
 
     @classmethod
     def from_coded_metar(cls, metar: CodedMetar) -> MetarWind | None:
@@ -422,12 +465,6 @@ class MetarWind:
 class MetarVisibility:
     """
     Object for parsing/decoding the visibility group from a coded METAR.
-
-    Possible unit values (case insensitive):
-        * 'mi' -- Statuate miles (default)
-        * 'ft' -- Feet
-        * 'm' -- Meters
-        * 'km' -- Kilometers
     """
 
     _unit_mi = _ALL_UNITS["mile us statute"]
@@ -445,7 +482,7 @@ class MetarVisibility:
             self.less_than_flag = False
         # Set the unit and convert if required
         self._unit = self._unit_mi
-        self._convert_unit(self._uinfo_from_str(unit))
+        self.set_unit(unit)
 
     def __repr__(self) -> str:
         sb = f"{self.__class__.__name__}(\n"
@@ -470,7 +507,31 @@ class MetarVisibility:
             return self._unit_km
         raise RuntimeError(f"Invalid unit specified: '{unit}'")
 
-    def _convert_unit(self, to_unit: UnitInfo) -> None:
+    def as_unit(self, unit: str) -> MetarVisibility:
+        """
+        Converts the value to the specified unit, and returns a new object.
+        Does not modify the unit of the current object.
+
+        Possible unit values (case insensitive):
+        * 'mi' -- Statuate miles (default)
+        * 'ft' -- Feet
+        * 'm' -- Meters
+        * 'km' -- Kilometers
+        """
+        return MetarVisibility(self.visibility_group, unit)
+
+    def set_unit(self, to_unit: UnitInfo | str) -> None:
+        """
+        Converts the value to the specified unit in place.
+
+        Possible unit values (case insensitive):
+        * 'mi' -- Statuate miles (default)
+        * 'ft' -- Feet
+        * 'm' -- Meters
+        * 'km' -- Kilometers
+        """
+        if isinstance(to_unit, str):
+            to_unit = self._uinfo_from_str(to_unit)
         if to_unit == self._unit:
             return
         self.distance = convert_unit(self.distance, self._unit, to_unit)
@@ -491,21 +552,9 @@ class MetarVisibility:
     @property
     def unit(self) -> UnitInfo:
         """
-        The current unit (UnitInfo object) of the distances. If set to one
-        of the below strings, will convert the values in place and set the new
-        UnitInfo appropriately.
-
-        Possible unit values (case insensitive):
-            * 'mi' -- Statuate miles (default)
-            * 'ft' -- Feet
-            * 'm' -- Meters
-            * 'km' -- Kilometers
+        The current unit (UnitInfo object) of the distances.
         """
         return self._unit
-
-    @unit.setter
-    def unit(self, unit: str) -> None:
-        self._convert_unit(self._uinfo_from_str(unit))
 
     @classmethod
     def from_coded_metar(cls, metar: CodedMetar) -> MetarVisibility:
@@ -520,11 +569,6 @@ class MetarPressure:
     """
     Object for parsing/decoding the altimeter/pressure groups from a coded
     METAR.
-
-    Possible unit values (case insensitive):
-        * 'hpa' -- Hectopascals/millibars (default)
-        * 'mb' -- Millibars (same as hPa)
-        * 'inhg' -- Inches of mercury
     """
 
     _unit_hpa = _ALL_UNITS["hectopascal"]
@@ -587,7 +631,29 @@ class MetarPressure:
             return self._unit_inhg
         raise RuntimeError(f"Invalid unit specified: '{unit}'")
 
-    def _convert_unit(self, to_unit: UnitInfo) -> None:
+    def as_unit(self, unit: str) -> MetarPressure:
+        """
+        Converts the value to the specified unit, and returns a new object.
+        Does not modify the unit of the current object.
+
+        Possible unit values (case insensitive):
+        * 'hpa' -- Hectopascals/millibars (default)
+        * 'mb' -- Millibars (same as hPa)
+        * 'inhg' -- Inches of mercury
+        """
+        return MetarPressure(self.altimeter_group, self.remarks_slp, unit)
+
+    def set_unit(self, to_unit: UnitInfo | str) -> None:
+        """
+        Converts the value to the specified unit in place.
+
+        Possible unit values (case insensitive):
+        * 'hpa' -- Hectopascals/millibars (default)
+        * 'mb' -- Millibars (same as hPa)
+        * 'inhg' -- Inches of mercury
+        """
+        if isinstance(to_unit, str):
+            to_unit = self._uinfo_from_str(to_unit)
         if to_unit == self._unit:
             return
         self.altimeter = convert_unit(self.altimeter, self._unit, to_unit)
@@ -601,7 +667,7 @@ class MetarPressure:
         """
         Outputs a human readable description of the decoded wind observations.
         """
-        if self.unit.label == "inch of mercury":
+        if self.unit == self._unit_inhg:
             sb = f"Altimeter {self.altimeter:.2f} {self.unit}"
             if self.sea_level_pressure is not None:
                 sb = f"{sb}, SLP {self.sea_level_pressure:.2f} {self.unit}"
@@ -613,21 +679,8 @@ class MetarPressure:
 
     @property
     def unit(self) -> UnitInfo:
-        """
-        The current unit (UnitInfo object) of the pressures. If set to one
-        of the below strings, will convert the values in place and set the new
-        UnitInfo appropriately.
-
-        Possible unit values (case insensitive):
-            * 'hpa' -- Hectopascals/millibars (default)
-            * 'mb' -- Millibars (same as hPa)
-            * 'inhg' -- Inches of mercury
-        """
+        """The current unit (UnitInfo object) of the pressures."""
         return self._unit
-
-    @unit.setter
-    def unit(self, unit: str) -> None:
-        self._convert_unit(self._uinfo_from_str(unit))
 
     @classmethod
     def from_coded_metar(cls, metar: CodedMetar) -> MetarPressure:
@@ -643,10 +696,6 @@ class MetarPressure:
 class MetarTemperature:
     """
     Object for parsing/decoding the temperature group from a coded METAR.
-
-    Possible unit values (case insensitive):
-        * 'C' -- Degrees celsius (default)
-        * 'F' -- Degrees fahrenheit
     """
 
     _unit_c = _ALL_UNITS["celsius"]
@@ -696,7 +745,7 @@ class MetarTemperature:
             )
         # Set the unit and convert if required
         self._unit = self._unit_c
-        self._convert_unit(self._uinfo_from_str(unit))
+        self.set_unit(unit)
 
     def __repr__(self) -> str:
         sb = f"{self.__class__.__name__}(\n"
@@ -721,7 +770,27 @@ class MetarTemperature:
             return self._unit_f
         raise RuntimeError(f"Invalid unit specified: '{unit}'")
 
-    def _convert_unit(self, to_unit: UnitInfo) -> None:
+    def as_unit(self, unit: str) -> MetarTemperature:
+        """
+        Converts the value to the specified unit, and returns a new object.
+        Does not modify the unit of the current object.
+
+        Possible unit values (case insensitive):
+            * 'C' -- Degrees celsius (default)
+            * 'F' -- Degrees fahrenheit
+        """
+        return MetarTemperature(self.temperature_group, self.temperature_remarks, unit)
+
+    def set_unit(self, to_unit: UnitInfo | str) -> None:
+        """
+        Converts the value to the specified unit in place.
+
+        Possible unit values (case insensitive):
+            * 'C' -- Degrees celsius (default)
+            * 'F' -- Degrees fahrenheit
+        """
+        if isinstance(to_unit, str):
+            to_unit = self._uinfo_from_str(to_unit)
         if to_unit == self._unit:
             return
         if self.temperature is not None:
@@ -751,20 +820,8 @@ class MetarTemperature:
 
     @property
     def unit(self) -> UnitInfo:
-        """
-            The current unit (UnitInfo object) of the temperature. If set to one
-            of the below strings, will convert the values in place and set the new
-            UnitInfo appropriately.
-
-        Possible unit values (case insensitive):
-            * 'C' -- Degrees celsius (default)
-            * 'F' -- Degrees fahrenheit
-        """
+        """The current unit (UnitInfo object) of the temperature."""
         return self._unit
-
-    @unit.setter
-    def unit(self, unit: str) -> None:
-        self._convert_unit(self._uinfo_from_str(unit))
 
     @classmethod
     def from_coded_metar(cls, metar: CodedMetar, unit: str = "C") -> MetarTemperature:
@@ -776,38 +833,9 @@ class MetarTemperature:
         return cls(metar.temperature, None, unit)
 
 
-@dataclass
-class SkyLayer:
-    """Dataclass for a sky condition layer from a METAR."""
-
-    descriptions = {
-        "CLR": "Clear",
-        "SKC": "Clear",
-        "FEW": "Few",
-        "SCT": "Scattered",
-        "BKN": "Broken",
-        "OVC": "Overcast",
-        "VV": "Vertical Visibility",
-    }
-
-    coverage: str
-    height: float | None
-
-    @property
-    def coverage_description(self) -> str:
-        """A descriptive string for the corresponding METAR abbreviation."""
-        return self.descriptions[self.coverage]
-
-
 class MetarSkyCondition:
     """
     Object for parsing/decoding the sky condition group from a coded METAR.
-
-    Possible unit values (case insensitive):
-        * 'ft' -- Feet (default)
-        * 'mi' -- Statuate miles
-        * 'm' -- Meters
-        * 'km' -- Kilometers
     """
 
     _unit_mi = _ALL_UNITS["mile us statute"]
@@ -820,7 +848,7 @@ class MetarSkyCondition:
         self.sky_conditions = self._sky_metar_parse()
         # Set the unit and convert if required
         self._unit = self._unit_ft
-        self._convert_unit(self._uinfo_from_str(unit))
+        self.set_unit(unit)
 
     def __repr__(self) -> str:
         sb = f"{self.__class__.__name__}(\n"
@@ -844,7 +872,31 @@ class MetarSkyCondition:
             return self._unit_km
         raise RuntimeError(f"Invalid unit specified: '{unit}'")
 
-    def _convert_unit(self, to_unit: UnitInfo) -> None:
+    def as_unit(self, unit: str) -> MetarSkyCondition:
+        """
+        Converts the value to the specified unit, and returns a new object.
+        Does not modify the unit of the current object.
+
+        Possible unit values (case insensitive):
+            * 'ft' -- Feet (default)
+            * 'mi' -- Statuate miles
+            * 'm' -- Meters
+            * 'km' -- Kilometers
+        """
+        return MetarSkyCondition(self.sky_condition_group, unit)
+
+    def set_unit(self, to_unit: UnitInfo | str) -> None:
+        """
+        Converts the value to the specified unit in place.
+
+        Possible unit values (case insensitive):
+            * 'ft' -- Feet (default)
+            * 'mi' -- Statuate miles
+            * 'm' -- Meters
+            * 'km' -- Kilometers
+        """
+        if isinstance(to_unit, str):
+            to_unit = self._uinfo_from_str(to_unit)
         if to_unit == self._unit or self.sky_conditions is None:
             return
         for cond in self.sky_conditions:
@@ -886,22 +938,8 @@ class MetarSkyCondition:
 
     @property
     def unit(self) -> UnitInfo:
-        """
-        The current unit (UnitInfo object) of the distances. If set to one
-        of the below strings, will convert the values in place and set the new
-        UnitInfo appropriately.
-
-        Possible unit values (case insensitive):
-            * 'mi' -- Statuate miles (default)
-            * 'ft' -- Feet
-            * 'm' -- Meters
-            * 'km' -- Kilometers
-        """
+        """The current unit (UnitInfo object) of the distances."""
         return self._unit
-
-    @unit.setter
-    def unit(self, unit: str) -> None:
-        self._convert_unit(self._uinfo_from_str(unit))
 
     @classmethod
     def from_coded_metar(cls, metar: CodedMetar) -> MetarSkyCondition:
