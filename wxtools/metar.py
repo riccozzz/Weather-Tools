@@ -268,24 +268,84 @@ class MetarObservations:
         sb = f"{sb}\n\nObserved on {ts} ({self._minutes_since()} minutes ago)\n"
         # Wind
         if self.wind is None:
-            sb = f"{sb}\nWind:\n    Unspecified"
+            sb = f"{sb}\nWind: Unspecified"
         else:
-            sb = f"{sb}\nWind:\n    {self.wind}"
+            sb = f"{sb}\nWind: {self.wind}"
         # Visibility
-        sb = f"{sb}\nVisibility:\n    {self.visibility}"
+        sb = f"{sb}\nVisibility: {self.visibility}"
         # Pressure
         sb = f"{sb}\nPressure:\n"
-        alt_hpa = f"{self.pressure.altimeter:.1f}"
+        p_hpa = self.pressure.as_unit("hpa")
+        p_inhg = self.pressure.as_unit("inhg")
+        sb = f"{sb}  Altimeter -- {p_hpa.altimeter:.1f} hPa"
+        sb = f"{sb} ({p_inhg.altimeter:.2f} inHg)\n"
         if self.pressure.sea_level_pressure is not None:
-            slp_hpa = f"{self.pressure.sea_level_pressure:.1f}"
-        self.pressure.unit = "inhg"  # type: ignore
-        alt_inhg = f"{self.pressure.altimeter:.2f}"
-        if self.pressure.sea_level_pressure is not None:
-            slp_inhg = f"{self.pressure.sea_level_pressure:.2f}"
-        self.pressure.unit = "hpa"  # type: ignore
-        sb = f"{sb}    Altimeter -- {alt_hpa} hPa ({alt_inhg} inHg)\n"
-        if self.pressure.sea_level_pressure is not None:
-            sb = f"{sb}    Sea Level -- {slp_hpa} hPa ({slp_inhg} inHg)\n"
+            sb = f"{sb}  Sea Level -- {p_hpa.sea_level_pressure:.1f} hPa"
+            sb = f"{sb} ({p_inhg.sea_level_pressure:.2f} inHg)"
+        else:
+            sb = f"{sb}  Sea Level -- Unspecified"
+        # Temperature
+        sb = f"{sb}\nTemperature:\n"
+        if self.temperature.temperature is None:
+            sb = f"{sb}  Unspecified"
+        else:
+            t_f = self.temperature.as_unit("F")
+            t_c = self.temperature.as_unit("C")
+            # Air temperature
+            temp_str = "Unspecified"
+            if t_f.temperature is not None:
+                temp_str = f"{t_f.temperature:.1f} °F ({t_c.temperature:.1f} °C)"
+            sb = f"{sb}  Air Temp -- {temp_str}"
+            # Dew point
+            temp_str = "Unspecified"
+            if t_f.dew_point is not None:
+                temp_str = f"{t_f.dew_point:.1f} °F ({t_c.dew_point:.1f} °C)"
+                sb = f"{sb}\n  Dew Point -- {temp_str}"
+                # Relative humidity
+                sb = f"{sb}\n  Relative Humidity -- {t_f.relative_humidity:.0f}%"
+                # Wet bulb
+                temp_str = f"{t_f.wet_bulb:.1f} °F ({t_c.wet_bulb:.1f} °C)"
+                sb = f"{sb}\n  Wet Bulb -- {temp_str}"
+                # Wind chill/heat index
+                if t_f.temperature is not None and t_f.temperature <= 50:
+                    wspeed = 0.0
+                    if self.wind is not None:
+                        wspeed = self.wind.as_unit("mph").speed
+                    wc_f = calculators.wind_chill(
+                        temperature=t_f.temperature,
+                        wind_speed=wspeed,
+                        temp_unit="F",
+                        wind_unit="mph",
+                    )
+                    wc_c = calculators.wind_chill(
+                        temperature=t_f.temperature,
+                        wind_speed=wspeed,
+                        temp_unit="C",
+                        wind_unit="mph",
+                    )
+                    temp_str = f"{wc_f:.1f} °F ({wc_c:.1f} °C)"
+                    sb = f"{sb}\n  Wind Chill -- {temp_str}"
+                else:
+                    temp_str = f"{t_f.heat_index:.1f} °F ({t_c.heat_index:.1f} °C)"
+                    sb = f"{sb}\n  Heat Index -- {temp_str}"
+        # Sky cover
+        sb = f"{sb}\nSky Cover:\n"
+        if (
+            self.sky_conditions.sky_conditions is None
+            or len(self.sky_conditions.sky_conditions) < 1
+        ):
+            sb = f"{sb}  Clear skies\n"
+        else:
+            for cond in self.sky_conditions.sky_conditions:
+                desc = cond.coverage_description
+                if cond.height is not None:
+                    if self.sky_conditions.unit.label in ("foot", "meter"):
+                        height_str = f"at {cond.height:.0f} {self.sky_conditions.unit}"
+                    else:
+                        height_str = f"at {cond.height:.2f} {self.sky_conditions.unit}"
+                else:
+                    height_str = "below station"
+                sb = f"{sb}  {desc} {height_str}\n"
         return sb
 
     def _parse_date_time(self, date_group: str) -> datetime:
