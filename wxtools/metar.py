@@ -106,7 +106,8 @@ class CodedMetar:
             sb = f"{sb} {self.report_modifier}"
         if self.wind is not None:
             sb = f"{sb} {self.wind}"
-        sb = f"{sb} {self.visibility}"
+        if self.visibility is not None:
+            sb = f"{sb} {self.visibility}"
         if self.runway_visual_range is not None:
             sb = f"{sb} {self.runway_visual_range}"
         if self.present_weather is not None:
@@ -159,7 +160,10 @@ class CodedMetar:
             wind_dir_spd = f"{wind_dir_spd} {observations.pop(0)}"
         return wind_dir_spd
 
-    def _pop_visibility(self, observations: list[str]) -> str:
+    def _pop_visibility(self, observations: list[str]) -> str | None:
+        if not observations[0].endswith("SM"):
+            if not observations[1].endswith("SM"):
+                return None
         visibility = observations.pop(0)
         if not visibility.endswith("SM"):
             # There could be spaces in this group, for fractional numbers
@@ -228,7 +232,9 @@ class MetarObservations:
         self.wind = None
         if self.coded_metar.wind is not None:
             self.wind = MetarWind(self.coded_metar.wind, "mph")
-        self.visibility = MetarVisibility(self.coded_metar.visibility)
+        self.visibility = None
+        if self.coded_metar.visibility is not None:
+            self.visibility = MetarVisibility(self.coded_metar.visibility)
         self.pressure = MetarPressure.from_coded_metar(self.coded_metar)
         self.temperature = MetarTemperature.from_coded_metar(self.coded_metar, "F")
         self.sky_conditions = MetarSkyCondition(self.coded_metar.sky_condition)
@@ -272,7 +278,10 @@ class MetarObservations:
         else:
             sb = f"{sb}\nWind: {self.wind}"
         # Visibility
-        sb = f"{sb}\nVisibility: {self.visibility}"
+        if self.visibility is None:
+            sb = f"{sb}\nVisibility: Unspecified"
+        else:
+            sb = f"{sb}\nVisibility: {self.visibility}"
         # Pressure
         sb = f"{sb}\nPressure:\n"
         p_hpa = self.pressure.as_unit("hpa")
@@ -343,6 +352,8 @@ class MetarObservations:
                         height_str = f"at {cond.height:.0f} {self.sky_conditions.unit}"
                     else:
                         height_str = f"at {cond.height:.2f} {self.sky_conditions.unit}"
+                    if cond.cb_flag:
+                        height_str = f"{height_str} (Cumulonimbus)"
                 else:
                     height_str = "below station"
                 sb = f"{sb}  {desc} {height_str}\n"
@@ -388,6 +399,7 @@ class SkyLayer:
 
     coverage: str
     height: float | None
+    cb_flag: bool = False
 
     @property
     def coverage_description(self) -> str:
@@ -617,11 +629,13 @@ class MetarVisibility:
         return self._unit
 
     @classmethod
-    def from_coded_metar(cls, metar: CodedMetar) -> MetarVisibility:
+    def from_coded_metar(cls, metar: CodedMetar) -> MetarVisibility | None:
         """
         Creates a decoded MetarVisibility object from a CodedMetar. This will
         simply use CodedMetar.visibility to construct the object.
         """
+        if metar.visibility is None:
+            return None
         return cls(metar.visibility)
 
 
@@ -674,6 +688,8 @@ class MetarPressure:
             return None
         slp_only = self.remarks_slp[3:]
         if slp_only == "NO":
+            return None
+        if "/" in slp_only:
             return None
         if slp_only[0] in ("0", "1", "2", "3", "4", "5"):
             slp_only = f"10{slp_only[0:2]}.{slp_only[2]}"
@@ -973,8 +989,9 @@ class MetarSkyCondition:
             if "/" in cond:
                 height = None
             else:
-                height = int(cond[3:]) * 100.0
-            sky.append(SkyLayer(contraction, height))
+                height = int(cond[3:6]) * 100.0
+            cb_flag = True if "CB" in cond else False
+            sky.append(SkyLayer(contraction, height, cb_flag))
         return sky
 
     def description(self) -> str:
@@ -991,6 +1008,8 @@ class MetarSkyCondition:
                     height_str = f"at {cond.height:.0f} {self.unit}"
                 else:
                     height_str = f"at {cond.height:.2f} {self.unit}"
+                if cond.cb_flag:
+                    height_str = f"{height_str} (Cumulonimbus)"
             else:
                 height_str = "below station"
             sb = f"{sb}, {desc} {height_str}"
