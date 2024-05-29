@@ -283,6 +283,11 @@ class MetarObservations:
         """Constructs a MetarObservations object using just the raw METAR."""
         return cls(CodedMetar(metar))
 
+    def observed_on(self) -> str:
+        """Human readable string for when the observation occured."""
+        ts = self.timestamp.strftime("%B %d, %Y at %H:%M UTC")
+        return f"Observed on {ts} ({self._minutes_since()} minutes ago)"
+
     def report(self) -> str:
         """Creates a full human readable report."""
         # Header, station id and name
@@ -293,8 +298,7 @@ class MetarObservations:
         # Raw METAR
         sb = f"{sb}\n\nMETAR (via aviationweather.gov):\n'{self.coded_metar}'"
         # Timestamp (acts as data header)
-        ts = self.timestamp.strftime("%B %d, %Y at %H:%M UTC")
-        sb = f"{sb}\n\nObserved on {ts} ({self._minutes_since()} minutes ago)\n"
+        sb = f"{sb}\n\n{self.observed_on()}\n"
         # Wind
         if self.wind is None:
             sb = f"{sb}\nWind: Unspecified"
@@ -307,7 +311,7 @@ class MetarObservations:
             sb = f"{sb}\nVisibility: {self.visibility}"
         # Pressure
         sb = f"{sb}\nPressure:\n"
-        sb = f"{sb}  Altimeter -- {self.pressure.altimeter_inhg:.2f} inHg"
+        sb = f"{sb}  Altimeter -- {self.pressure.altimeter_inhg:.2f} inHg\n"
         if self.pressure.sea_level_hpa is not None:
             sb = f"{sb}  Sea Level -- {self.pressure.sea_level_hpa:.1f} hPa"
         else:
