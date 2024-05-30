@@ -43,6 +43,15 @@ def _get_wind_str(obs: MetarObservations) -> str:
     return sb
 
 
+def _get_pw_str(obs: MetarObservations) -> str:
+    if len(obs.present_weather) < 1:
+        return "Unspecified"
+    sb = ""
+    for present_weather in obs.present_weather:
+        sb = f"{sb}\n- {present_weather.description()}"
+    return sb.strip()
+
+
 def _get_vis_str(obs: MetarObservations) -> str:
     if obs.visibility is None:
         return "Unspecified"
@@ -173,6 +182,7 @@ async def metar(ctx: commands.Context, station_id: str) -> None:
     embed.add_field(name="__Pressure__", value=_get_pressure_str(obs), inline=True)
     embed.add_field(name="", value="")
     embed.add_field(name="__Sky Condition__", value=_get_skycond_str(obs), inline=True)
+    embed.add_field(name="__Present Weather__", value=_get_pw_str(obs), inline=True)
 
     await ctx.send(embed=embed)
 

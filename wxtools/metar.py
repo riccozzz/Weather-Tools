@@ -261,6 +261,7 @@ class MetarObservations:
         self.pressure = MetarPressure.from_coded_metar(self.coded_metar)
         self.temperature = MetarTemperature.from_coded_metar(self.coded_metar)
         self.sky_conditions = MetarSkyCondition(self.coded_metar.sky_condition)
+        self.present_weather = self._get_present_weather()
 
     def __repr__(self) -> str:
         sb = f"{self.__class__.__name__}(\n"
@@ -272,7 +273,8 @@ class MetarObservations:
         sb = f"{sb}    visibility={quotify(self.visibility)},\n"
         sb = f"{sb}    pressure={quotify(self.pressure)},\n"
         sb = f"{sb}    temperature={quotify(self.temperature)},\n"
-        sb = f"{sb}    sky_conditions={quotify(self.sky_conditions)}\n"
+        sb = f"{sb}    sky_conditions={quotify(self.sky_conditions)},\n"
+        sb = f"{sb}    present_weather={quotify(self.present_weather)}\n"
         return f"{sb})"
 
     def __str__(self) -> str:
@@ -371,6 +373,14 @@ class MetarObservations:
                     height_str = "below station"
                 sb = f"{sb}  {desc} {height_str}\n"
         return sb
+
+    def _get_present_weather(self) -> list[WeatherPhenomena]:
+        lb: list[WeatherPhenomena] = []
+        if self.coded_metar.present_weather is None:
+            return lb
+        for present_weather in self.coded_metar.present_weather.split():
+            lb.append(WeatherPhenomena(present_weather))
+        return lb
 
     def _parse_date_time(self, date_group: str) -> datetime:
         """
@@ -714,3 +724,162 @@ class MetarSkyCondition:
         will simply use CodedMetar.sky_condition to construct the object.
         """
         return cls(metar.sky_condition)
+
+
+class WeatherPhenomena:
+    """
+    Object for individual weather phenomena/present weather conditions.
+    """
+
+    _descriptors = {
+        "MI": "Shallow",
+        "PR": "Partial",
+        "BC": "Patches",
+        "DR": "Low Drifting",
+        "BL": "Blowing",
+        "SH": "Showers",
+        "TS": "Thunderstorm",
+        "FZ": "Freezing",
+    }
+
+    _precips = {
+        "DZ": "Drizzle",
+        "RA": "Rain",
+        "SN": "Snow",
+        "SG": "Snow Grains",
+        "IC": "Ice Crystals",
+        "PL": "Ice Pellets",
+        "GR": "Hail",
+        "GS": "Snow Pellets",
+        "UP": "Unknown",
+    }
+
+    _obscurations = {
+        "BR": "Mist",
+        "FG": "Fog",
+        "FU": "Smoke",
+        "VA": "Volcanic Ash",
+        "DU": "Widespread Dust",
+        "SA": "Sand",
+        "HZ": "Haze",
+        "PY": "Spray",
+    }
+
+    _others = {
+        "PO": "Well-Developed Dust/Sand Whirls",
+        "SQ": "Squalls",
+        "FC": "Funnel Cloud",
+        "SS": "Sandstorm",
+        "DS": "Duststorm",
+    }
+
+    def __init__(self, present_weather: str) -> None:
+        unparsed = present_weather.upper().strip()
+        if len(unparsed) < 2:
+            raise RuntimeError(f"Present weather '{present_weather}' is invalid.")
+
+        # Set everything to None by default
+        self.intensity: str | None = None
+        self.descriptor: str | None = None
+        self.precipitation: list[str] = []
+        self.obscuration: str | None = None
+        self.other: str | None = None
+
+        # Intensity
+        if unparsed[0] in ("-", "+"):
+            self.intensity = unparsed[0]
+            unparsed = unparsed[1:]
+        elif unparsed.startswith("VC"):
+            self.intensity = "VC"
+            unparsed = unparsed[2:]
+
+        # Loop everything else in pairs
+        uparts = [unparsed[i : i + 2] for i in range(0, len(unparsed), 2)]  # noqa: E203
+        for part in uparts:
+            if part in self._descriptors:
+                if self.descriptor is not None:
+                    self.descriptor = f"{self.descriptor}{part}"
+                else:
+                    self.descriptor = part
+            if part in self._precips:
+                self.precipitation.append(part)
+            if part in self._obscurations:
+                if self.obscuration is not None:
+                    self.obscuration = f"{self.obscuration}{part}"
+                else:
+                    self.obscuration = part
+            if part in self._others:
+                if self.other is not None:
+                    self.other = f"{self.other}{part}"
+                else:
+                    self.other = part
+
+    def __repr__(self) -> str:
+        sb = f"{self.__class__.__name__}(\n"
+        sb = f"{sb}    intensity={quotify(self.intensity)},\n"
+        sb = f"{sb}    descriptor={quotify(self.descriptor)},\n"
+        sb = f"{sb}    precipitation={quotify(self.precipitation)},\n"
+        sb = f"{sb}    obscuration={quotify(self.obscuration)},\n"
+        sb = f"{sb}    other={quotify(self.other)},\n"
+        return f"{sb})"
+
+    def __str__(self) -> str:
+        if self.intensity is not None:
+            sb = f"{self.intensity}"
+        else:
+            sb = ""
+        if self.descriptor is not None:
+            sb = f"{sb}{self.descriptor}"
+        if len(self.precipitation) > 0:
+            for precip in self.precipitation:
+                sb = f"{sb}{precip}"
+        if self.obscuration is not None:
+            sb = f"{sb}{self.obscuration}"
+        if self.other is not None:
+            sb = f"{sb}{self.other}"
+        return sb
+
+    def _intensity_str(self) -> str:
+        if self.intensity is not None:
+            if self.intensity == "-":
+                return "Light"
+            if self.intensity == "+":
+                return "Heavy"
+            if self.intensity == "VC":
+                return "Vicinity"
+        return ""
+
+    def _desc_str(self) -> str:
+        if self.descriptor is not None:
+            return self._descriptors.get(self.descriptor, "")
+        return ""
+
+    def _precip_str(self) -> str:
+        if len(self.precipitation) > 0:
+            sb = ""
+            for precip in self.precipitation:
+                sb = f"{sb} {self._precips.get(precip, '')}"
+            return sb.strip()
+        return ""
+
+    def _obsc_str(self) -> str:
+        if self.obscuration is not None:
+            return self._obscurations.get(self.obscuration, "")
+        return ""
+
+    def _other_str(self) -> str:
+        if self.other is not None:
+            return self._others.get(self.other, "")
+        return ""
+
+    def description(self) -> str:
+        """
+        Does a quick decode and returns a human readable string. This may not
+        be ordered properly or handle special cases.
+        """
+        # TODO: Handle special cases
+        full_str = (
+            f"{self._intensity_str()} {self._desc_str()} "
+            f"{self._precip_str()} {self._obsc_str()} {self._other_str()}"
+        )
+        return " ".join(full_str.split())
