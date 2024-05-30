@@ -138,37 +138,14 @@ def _color_from_temp(temp_c: float | None) -> discord.Colour:
     return discord.Colour.from_rgb(255, 0, 0)  # Red
 
 
-# Create an instance of Intents and enable the ones you need
-intents = discord.Intents.default()
-intents.message_content = True
-
-# Create a bot instance with the intents
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-
-@bot.event
-async def on_ready() -> None:
-    """When the bot first is launched"""
-    print(f"Logged in as {bot.user}")
-
-
-@bot.command(name="metar", help="Metar lol")  # type: ignore
-async def metar(ctx: commands.Context, station_id: str) -> None:
-    """METAR command"""
-
-    try:
-        raw_metar = aviationweather_get_metar(station_id.strip().upper())
-        obs = MetarObservations.from_raw_string(raw_metar)
-    except Exception as ex:
-        await ctx.send(f"Cannot load station data. {ex}")
-        return
+def _create_report_embed(obs: MetarObservations) -> discord.Embed:
 
     # Create the basic body embed without fields
     embed = discord.Embed(
         title=f"{obs.station_id} ({obs.station_name})",
-        url=f"https://www.weather.gov/wrh/timeseries?site={station_id}",
+        url=f"https://www.weather.gov/wrh/timeseries?site={obs.station_id}",
         colour=_color_from_temp(obs.temperature.temperature_c),
-        description=f"```{raw_metar}```",
+        description=f"```{obs.coded_metar}```",
     )
 
     # Footer = observation timestamp
@@ -184,6 +161,49 @@ async def metar(ctx: commands.Context, station_id: str) -> None:
     embed.add_field(name="__Sky Condition__", value=_get_skycond_str(obs), inline=True)
     embed.add_field(name="__Present Weather__", value=_get_pw_str(obs), inline=True)
 
+    return embed
+
+
+# Create an instance of Intents and enable the ones you need
+intents = discord.Intents.default()
+intents.message_content = True
+
+# Create a bot instance with the intents
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+
+@bot.event
+async def on_ready() -> None:
+    """When the bot first is launched"""
+    print(f"Logged in as {bot.user}")
+
+
+@bot.command(name="metar")  # type: ignore
+async def metar(ctx: commands.Context, station_id: str) -> None:
+    """METAR command"""
+
+    try:
+        raw_metar = aviationweather_get_metar(station_id.strip().upper())
+        obs = MetarObservations.from_raw_string(raw_metar)
+    except Exception as ex:
+        await ctx.send(f"Cannot load station data. {ex}")
+        return
+
+    embed = _create_report_embed(obs)
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="metar_parse")  # type: ignore
+async def metar_parse(ctx: commands.Context, metar_str: str) -> None:
+    """METAR parse command"""
+
+    try:
+        obs = MetarObservations.from_raw_string(metar_str)
+    except Exception as ex:
+        await ctx.send(f"Cannot parse data. {ex}")
+        return
+
+    embed = _create_report_embed(obs)
     await ctx.send(embed=embed)
 
 
