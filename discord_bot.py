@@ -4,15 +4,15 @@ WIP discord bot module
 https://message.style/app/editor
 """
 
+from dataclasses import dataclass
+from typing import Any
 import discord
 from discord.ext import commands
-
-import discord.ext
 
 from wxtools.calculators import wind_chill
 from wxtools.common import cardinal_direction
 from wxtools.metar import MetarObservations
-from wxtools.wip import aviationweather_get_metar
+from wxtools.wip import aviationweather_get_metar, aviationweather_get_info
 from wxtools.units import convert_unit, unit_by_label
 
 _UNIT_KT = unit_by_label("knot")
@@ -138,11 +138,41 @@ def _color_from_temp(temp_c: float | None) -> discord.Colour:
     return discord.Colour.from_rgb(255, 0, 0)  # Red
 
 
-def _create_report_embed(obs: MetarObservations) -> discord.Embed:
+@dataclass
+class StationInfo:
+    """Dataclass for station information."""
+
+    name: str | None
+    latitude: float | None
+    longitude: float | None
+    elevation_m: float | None
+    state: str | None
+    country: str | None
+
+
+def _create_report_embed(
+    obs: MetarObservations, info: dict[str, Any] | None
+) -> discord.Embed:
+
+    # Extract station info that we care about
+    station_info = None
+    if info is not None:
+        station_info = StationInfo(
+            name=info.get("site"),
+            latitude=info.get("lat"),
+            longitude=info.get("lon"),
+            elevation_m=info.get("elev"),
+            state=info.get("state"),
+            country=info.get("country"),
+        )
+    if station_info is not None and station_info.name is not None:
+        header = f"{obs.station_id} ({station_info.name})"
+    else:
+        header = obs.station_id
 
     # Create the basic body embed without fields
     embed = discord.Embed(
-        title=f"{obs.station_id} ({obs.station_name})",
+        title=header,
         url=f"https://www.weather.gov/wrh/timeseries?site={obs.station_id}",
         colour=_color_from_temp(obs.temperature.temperature_c),
         description=f"```{obs.coded_metar}```",
@@ -188,8 +218,12 @@ async def metar(ctx: commands.Context, station_id: str) -> None:
     except Exception as ex:
         await ctx.send(f"Cannot load station data. {ex}")
         return
+    try:
+        station_info = aviationweather_get_info(obs.station_id)
+    except Exception:
+        station_info = None
 
-    embed = _create_report_embed(obs)
+    embed = _create_report_embed(obs, station_info)
     await ctx.send(embed=embed)
 
 
@@ -202,8 +236,12 @@ async def metar_parse(ctx: commands.Context, metar_str: str) -> None:
     except Exception as ex:
         await ctx.send(f"Cannot parse data. {ex}")
         return
+    try:
+        station_info = aviationweather_get_info(obs.station_id)
+    except Exception:
+        station_info = None
 
-    embed = _create_report_embed(obs)
+    embed = _create_report_embed(obs, station_info)
     await ctx.send(embed=embed)
 
 

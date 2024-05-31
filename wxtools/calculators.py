@@ -20,7 +20,7 @@ def _convert_temperature(
     Helper method for converting temperature values to C and F. Also will raise
     CalculatorError if specified units are incorrect or not usable.
     """
-    valid_units = ("C", "F")
+    valid_units = {"C": "celsius", "F": "fahrenheit", "K": "kelvin"}
     conv_from = current_unit.upper().strip()
     conv_to = to_unit.upper().strip()
     if error_check:
@@ -30,9 +30,9 @@ def _convert_temperature(
             raise CalculatorError(f"Invalid convert to unit specified: '{conv_to}'")
     if conv_from == conv_to:
         return temperature
-    if conv_from == "F" and conv_to == "C":
-        return convert_unit(temperature, from_unit="fahrenheit", to_unit="celsius")
-    return convert_unit(temperature, from_unit="celsius", to_unit="fahrenheit")
+    return convert_unit(
+        temperature, from_unit=valid_units[conv_from], to_unit=valid_units[conv_to]
+    )
 
 
 def _convert_wind_speed(

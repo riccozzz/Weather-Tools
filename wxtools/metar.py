@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from dataclasses import dataclass
 
-from .common import cardinal_direction, quotify, get_icao_name, fraction_str_to_float
+from .common import cardinal_direction, quotify, fraction_str_to_float
 from . import calculators
 
 
@@ -250,7 +250,6 @@ class MetarObservations:
     def __init__(self, coded_metar: CodedMetar) -> None:
         self.coded_metar = coded_metar
         self.station_id = self.coded_metar.station_id
-        self.station_name = get_icao_name(self.coded_metar.station_id)
         self.timestamp = self._parse_date_time(self.coded_metar.date_time)
         self.wind = None
         if self.coded_metar.wind is not None:
@@ -267,7 +266,6 @@ class MetarObservations:
         sb = f"{self.__class__.__name__}(\n"
         sb = f"{sb}    coded_metar={quotify(self.coded_metar)},\n"
         sb = f"{sb}    station_id={quotify(self.station_id)},\n"
-        sb = f"{sb}    station_name={quotify(self.station_name)},\n"
         sb = f"{sb}    timestamp={quotify(self.timestamp)},\n"
         sb = f"{sb}    wind={quotify(self.wind)},\n"
         sb = f"{sb}    visibility={quotify(self.visibility)},\n"
@@ -292,11 +290,8 @@ class MetarObservations:
 
     def report(self) -> str:
         """Creates a full human readable report."""
-        # Header, station id and name
-        if self.station_name is not None:
-            sb = f"{self.station_id} ({self.station_name})"
-        else:
-            sb = self.station_id
+        # Header, station id
+        sb = self.station_id
         # Raw METAR
         sb = f"{sb}\n\nMETAR (via aviationweather.gov):\n'{self.coded_metar}'"
         # Timestamp (acts as data header)

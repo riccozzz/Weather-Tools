@@ -1,6 +1,7 @@
 """Random work in progress stuff for development"""
 
 from __future__ import annotations
+from typing import Any
 
 import requests
 
@@ -19,6 +20,25 @@ def aviationweather_get_metar(station_id: str) -> str:
         if len(metar_raw) == 0:
             raise RuntimeError(f"Could not retrieve data for '{station_id}.'")
         return metar_raw
+    except requests.RequestException as ex:
+        raise RuntimeError(ex) from None
+
+
+def aviationweather_get_info(station_id: str) -> dict[str, Any]:
+    """Returns the latest info from the given station."""
+
+    url = (
+        "https://aviationweather.gov/api/data/stationinfo"
+        f"?ids={station_id}&format=json"
+    )
+    try:
+        resp = requests.get(url=url, timeout=5)
+        resp.raise_for_status()
+        jdata = resp.json()
+        if isinstance(jdata, list):
+            if len(jdata) > 0 and isinstance(jdata[0], dict):
+                return jdata[0]
+        raise RuntimeError("Unknown payload data in response.")
     except requests.RequestException as ex:
         raise RuntimeError(ex) from None
 
